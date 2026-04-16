@@ -307,8 +307,7 @@ cd gitlab-infra
 docker compose up -d
 docker logs -f gitlab-ce-rjrst-15-04-2026
 ```
-
-**[IMAGE 1 — Interface de GitLab après installation]**
+<img width="975" height="465" alt="image" src="https://github.com/user-attachments/assets/c3931490-76b2-4715-b9b1-e20bb4323877" />
 
 #### 1.3 Récupération du mot de passe root initial
 
