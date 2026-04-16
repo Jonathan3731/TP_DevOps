@@ -105,15 +105,16 @@ deploy_production:
   script:
     - echo "=== DEPLOY TO PRODUCTION ==="
     - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
-    - docker pull $CI_REGISTRY_IMAGE:prod
     - docker network create $NETWORK_NAME-prod 2>/dev/null || true
     - if ! docker ps -a -q -f name=db-prod-rjrst | grep -q .; then docker run -d --name db-prod-rjrst --network $NETWORK_NAME-prod --restart unless-stopped -e POSTGRES_DB=appdb -e POSTGRES_USER=appuser -e POSTGRES_PASSWORD=apppass -v db-prod-data:/var/lib/postgresql/data postgres:16-alpine; sleep 10; fi
-    - OLD_IMAGE=$(docker inspect app-prod-rjrst --format '{{.Config.Image}}' 2>/dev/null || echo "none")
-    - echo "Previous image $OLD_IMAGE"
-    - docker tag $OLD_IMAGE $CI_REGISTRY_IMAGE:previous 2>/dev/null || true
+    - echo "=== Saving current image as previous for rollback ==="
+    - docker pull $CI_REGISTRY_IMAGE:prod || true
+    - if docker images $CI_REGISTRY_IMAGE:prod --format '{{.ID}}' | grep -q .; then docker tag $CI_REGISTRY_IMAGE:prod $CI_REGISTRY_IMAGE:previous; docker push $CI_REGISTRY_IMAGE:previous; fi
+    - echo "=== Deploying new version ==="
+    - docker pull $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA
     - docker stop app-prod-rjrst 2>/dev/null || true
     - docker rm app-prod-rjrst 2>/dev/null || true
-    - docker run -d --name app-prod-rjrst --network $NETWORK_NAME-prod --restart unless-stopped -p 8000:8000 -e DB_ENGINE=postgresql -e DB_NAME=appdb -e DB_USERNAME=appuser -e DB_PASS=apppass -e DB_HOST=db-prod-rjrst -e DB_PORT=5432 -e SECRET_KEY=prod-super-secret-key -e DEBUG=False -e DJANGO_SUPERUSER_USERNAME=admin -e DJANGO_SUPERUSER_EMAIL=admin@rjrst.local -e DJANGO_SUPERUSER_PASSWORD=admin123 -v app-prod-backups:/app/backups $CI_REGISTRY_IMAGE:prod
+    - docker run -d --name app-prod-rjrst --network $NETWORK_NAME-prod --restart unless-stopped -p 8000:8000 -e DB_ENGINE=postgresql -e DB_NAME=appdb -e DB_USERNAME=appuser -e DB_PASS=apppass -e DB_HOST=db-prod-rjrst -e DB_PORT=5432 -e SECRET_KEY=prod-super-secret-key -e DEBUG=False -e DJANGO_SUPERUSER_USERNAME=admin -e DJANGO_SUPERUSER_EMAIL=admin@rjrst.local -e DJANGO_SUPERUSER_PASSWORD=admin123 -v app-prod-backups:/app/backups $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA
     - sleep 5
     - echo "=== Production deployed on http://192.168.64.2:8000 ==="
 
@@ -139,6 +140,7 @@ rollback:
   script:
     - echo "=== ROLLBACK TO PREVIOUS VERSION ==="
     - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    - docker pull $CI_REGISTRY_IMAGE:previous
     - docker stop app-prod-rjrst 2>/dev/null || true
     - docker rm app-prod-rjrst 2>/dev/null || true
     - docker run -d --name app-prod-rjrst --network $NETWORK_NAME-prod --restart unless-stopped -p 8000:8000 -e DB_ENGINE=postgresql -e DB_NAME=appdb -e DB_USERNAME=appuser -e DB_PASS=apppass -e DB_HOST=db-prod-rjrst -e DB_PORT=5432 -e SECRET_KEY=prod-super-secret-key -e DEBUG=False -v app-prod-backups:/app/backups $CI_REGISTRY_IMAGE:previous
